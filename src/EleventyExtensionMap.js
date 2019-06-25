@@ -150,7 +150,9 @@ class EleventyExtensionMap {
         njk: "njk",
         liquid: "liquid",
         "11ty.js": "11ty.js",
-        "11ty.cjs": "11ty.js"
+        "11ty.cjs": "11ty.js",
+        sass: "sass",
+        scss: "sass",
       };
 
       if ("extensionMap" in this.config) {
