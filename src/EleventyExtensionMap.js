@@ -150,7 +150,9 @@ class EleventyExtensionMap {
       pug: "pug",
       njk: "njk",
       liquid: "liquid",
-      "11ty.js": "11ty.js"
+      "11ty.js": "11ty.js",
+      sass: "sass",
+      scss: "sass"
     };
 
     for (let extension in aliases) {
