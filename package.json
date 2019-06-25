@@ -1,5 +1,5 @@
 {
-  "name": "@11ty/eleventy",
+  "name": "@paulwh/eleventy",
   "version": "0.11.0",
   "description": "Transform a directory of templates into HTML.",
   "publishConfig": {
