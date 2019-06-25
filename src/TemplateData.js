@@ -16,6 +16,7 @@ const debugWarn = require("debug")("Eleventy:Warnings");
 const debug = require("debug")("Eleventy:TemplateData");
 const debugDev = require("debug")("Dev:Eleventy:TemplateData");
 const deleteRequireCache = require("./Util/DeleteRequireCache");
+const yaml = require("js-yaml");
 
 const bench = require("./BenchmarkManager").get("Data");
 const aggregateBench = require("./BenchmarkManager").get("Aggregate");
@@ -129,13 +130,15 @@ class TemplateData {
     let dir = await this.getInputDir();
     let paths = [
       `${dir}/**/*.json`, // covers .11tydata.json too
+      `${dir}/**/*.yml`,
+      `${dir}/**/*.yaml`,
       `${dir}/**/*${this.config.jsDataFileSuffix}.cjs`,
-      `${dir}/**/*${this.config.jsDataFileSuffix}.js`
+      `${dir}/**/*${this.config.jsDataFileSuffix}.js`,
     ];
 
     if (this.hasUserDataExtensions()) {
       let userPaths = this.getUserDataExtensions().map(
-        extension => `${dir}/**/*.${extension}` // covers .11tydata.{extension} too
+        (extension) => `${dir}/**/*.${extension}` // covers .11tydata.{extension} too
       );
       paths = userPaths.concat(paths);
     }
@@ -146,7 +149,7 @@ class TemplateData {
   async getTemplateJavaScriptDataFileGlob() {
     let dir = await this.getInputDir();
     return TemplatePath.addLeadingDotSlashArray([
-      `${dir}/**/*${this.config.jsDataFileSuffix}.js`
+      `${dir}/**/*${this.config.jsDataFileSuffix}.js`,
     ]);
   }
 
@@ -162,7 +165,13 @@ class TemplateData {
   }
 
   getGlobalDataExtensionPriorities() {
-    return this.getUserDataExtensions().concat(["json", "cjs", "js"]);
+    return this.getUserDataExtensions().concat([
+      "json",
+      "yaml",
+      "yml",
+      "cjs",
+      "js",
+    ]);
   }
 
   static calculateExtensionPriority(path, priorities) {
@@ -182,7 +191,7 @@ class TemplateData {
     fsBench.before();
     let paths = await fastglob(await this.getGlobalDataGlob(), {
       caseSensitiveMatch: false,
-      dot: true
+      dot: true,
     });
     fsBench.after();
 
@@ -358,6 +367,23 @@ class TemplateData {
     }
   }
 
+  static async readDataFile(path, extension) {
+    switch (extension) {
+      case "js":
+      case "json":
+      case "node":
+        deleteRequireCache(path);
+        let returnValue = require(path);
+        if (typeof returnValue === "function") {
+          returnValue = await returnValue();
+        }
+        return returnValue;
+      case "yaml":
+      case "yml":
+        return yaml.safeLoad(fs.readFileSync(path)) || {};
+    }
+  }
+
   async getDataValue(path, rawImports, ignoreProcessing) {
     let extension = TemplatePath.getExtension(path);
 
@@ -366,6 +392,8 @@ class TemplateData {
     if (
       extension === "js" ||
       extension === "cjs" ||
+      extension === "yaml" ||
+      extension === "yml" ||
       (extension === "json" && (ignoreProcessing || !this.dataTemplateEngine))
     ) {
       // JS data file or require’d JSON (no preprocessing needed)
@@ -378,12 +406,8 @@ class TemplateData {
       aggregateDataBench.before();
       let dataBench = bench.get(`\`${path}\``);
       dataBench.before();
-      deleteRequireCache(localPath);
 
-      let returnValue = require(localPath);
-      if (typeof returnValue === "function") {
-        returnValue = await returnValue();
-      }
+      let returnValue = TemplateData.readDataFile(localPath, extension);
 
       dataBench.after();
       aggregateDataBench.after();
@@ -420,12 +444,16 @@ class TemplateData {
     paths.push(base + dataSuffix + ".js");
     paths.push(base + dataSuffix + ".cjs");
     paths.push(base + dataSuffix + ".json");
+    paths.push(base + dataSuffix + ".yaml");
+    paths.push(base + dataSuffix + ".yml");
 
     // inject user extensions
     this._pushExtensionsToPaths(paths, base + dataSuffix, extensions);
 
     // top level
     paths.push(base + ".json");
+    paths.push(base + ".yaml");
+    paths.push(base + ".yml");
     this._pushExtensionsToPaths(paths, base, extensions);
   }
 
