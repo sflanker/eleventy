@@ -15,6 +15,7 @@ const debugWarn = require("debug")("Eleventy:Warnings");
 const debug = require("debug")("Eleventy:TemplateData");
 const debugDev = require("debug")("Dev:Eleventy:TemplateData");
 const deleteRequireCache = require("./Util/DeleteRequireCache");
+const yaml = require("js-yaml");
 
 class TemplateDataParseError extends EleventyBaseError {}
 
@@ -113,6 +114,8 @@ class TemplateData {
     let dir = await this.getInputDir();
     return TemplatePath.addLeadingDotSlashArray([
       `${dir}/**/*.json`, // covers .11tydata.json too
+      `${dir}/**/*.yml`,
+      `${dir}/**/*.yaml`,
       `${dir}/**/*${this.config.jsDataFileSuffix}.js`
     ]);
   }
@@ -126,7 +129,7 @@ class TemplateData {
 
   async getGlobalDataGlob() {
     let dir = await this.getInputDir();
-    return [this._getGlobalDataGlobByExtension(dir, "(json|js)")];
+    return [this._getGlobalDataGlobByExtension(dir, "(json|js|yaml|yml)")];
   }
 
   getWatchPathCache() {
@@ -228,18 +231,30 @@ class TemplateData {
     return rawInput;
   }
 
+  static async readDataFile(path) {
+    switch (TemplatePath.getExtension(path)) {
+      case "js":
+      case "json":
+      case "node":
+        deleteRequireCache(localPath);
+        let returnValue = require(path);
+        if (typeof returnValue === "function") {
+          returnValue = await returnValue();
+        }
+        return returnValue;
+      case "yaml":
+      case "yml":
+        return yaml.safeLoad(fs.readFileSync(path)) || {};
+    }
+  }
+
   async getDataValue(path, rawImports, ignoreProcessing) {
     if (ignoreProcessing || TemplatePath.getExtension(path) === "js") {
       let localPath = TemplatePath.absolutePath(path);
       if (await fs.pathExists(localPath)) {
         let dataBench = bench.get(`\`${path}\``);
         dataBench.before();
-        deleteRequireCache(localPath);
-        let returnValue = require(localPath);
-        if (typeof returnValue === "function") {
-          returnValue = await returnValue();
-        }
-
+        let returnValue = await TemplateData.readDataFile(localPath);
         dataBench.after();
         return returnValue;
       } else {
@@ -298,7 +313,11 @@ class TemplateData {
       debug("Using %o to find data files.", dataSuffix);
       paths.push(filePathNoExt + dataSuffix + ".js");
       paths.push(filePathNoExt + dataSuffix + ".json");
+      paths.push(filePathNoExt + dataSuffix + ".yaml");
+      paths.push(filePathNoExt + dataSuffix + ".yml");
       paths.push(filePathNoExt + ".json");
+      paths.push(filePathNoExt + ".yaml");
+      paths.push(filePathNoExt + ".yml");
 
       let allDirs = TemplatePath.getAllDirs(parsed.dir);
       debugDev("allDirs: %o", allDirs);
@@ -309,13 +328,21 @@ class TemplateData {
         if (!inputDir) {
           paths.push(dirPathNoExt + dataSuffix + ".js");
           paths.push(dirPathNoExt + dataSuffix + ".json");
+          paths.push(dirPathNoExt + dataSuffix + ".yaml");
+          paths.push(dirPathNoExt + dataSuffix + ".yml");
           paths.push(dirPathNoExt + ".json");
+          paths.push(dirPathNoExt + ".yaml");
+          paths.push(dirPathNoExt + ".yml");
         } else {
           debugDev("dirStr: %o; inputDir: %o", dir, inputDir);
           if (dir.indexOf(inputDir) === 0 && dir !== inputDir) {
             paths.push(dirPathNoExt + dataSuffix + ".js");
             paths.push(dirPathNoExt + dataSuffix + ".json");
+            paths.push(dirPathNoExt + dataSuffix + ".yaml");
+            paths.push(dirPathNoExt + dataSuffix + ".yml");
             paths.push(dirPathNoExt + ".json");
+            paths.push(dirPathNoExt + ".yaml");
+            paths.push(dirPathNoExt + ".yml");
           }
         }
       }
